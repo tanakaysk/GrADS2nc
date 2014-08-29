@@ -1,0 +1,9 @@
+# Fortran imtermediate and object files #
+#########################################
+*.o
+*.mod
+
+# Temporary files #
+###################
+*~
+\#*
