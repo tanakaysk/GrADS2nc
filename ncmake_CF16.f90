@@ -2,7 +2,7 @@ program ncmake_CF16
 
   use netcdf
   use cnst,  only: i4, r4
-  use nclib, only: nclib__handle_error
+  use nclib, only: CFnclib__dimensionAttribute, CFnclib__dimensionPut, nclib__errMssg
 
   implicit none
 
@@ -21,6 +21,7 @@ program ncmake_CF16
   integer(i4)               :: ncid      ! netCDF ID
   integer(i4)               :: n         ! loop variable
   integer(i4)               :: ierr, nerr
+  real(r4),      allocatable:: vdim(:)   ! dimension value
   logical                   :: ldef      ! defined mode flag
   type(dimCF16), allocatable:: dimIfs(:) ! coordinate information
 
@@ -32,6 +33,18 @@ program ncmake_CF16
   integer(i4)         :: nvar   ! number of variables
   character(len = 100):: title  ! 'title' attribute
   character(len = 200):: source ! 'source' attribute
+  ! &nml_coordinate
+  integer(i4)         :: dimLength     ! length of the dimension
+  character(len = 20) :: dimName       ! name of the dimension
+  character(len = 10) :: dimKind       ! kind of the dimension variable
+  character(len = 200):: standard_name ! 'standard_name' attribute of the dimension
+  character(len = 200):: long_name     ! 'long_name' attribute of the dimension
+  character(len = 100):: units         ! 'units' attribute of the dimension
+  character(len = 1)  :: axis          ! 'axis' attribute of the dimension
+  character(len = 4)  :: positive      ! 'positive' attribute of the dimension
+  character(len = 20) :: calendar      ! 'calendar' attibute of time dimension
+  character(len = 20) :: dateRef       ! reference date of the time axis
+  character(len = 200):: fileCord      ! name of dimension file
 
   namelist /nml_files/   file_nc, flg_64bit
   namelist /nml_general/ ncor, nvar, title, source
@@ -52,7 +65,7 @@ program ncmake_CF16
   else
     nerr = nf90_create( trim( file_nc ), NF90_NOCLOBBER, ncid )
   endif
-  call nclib__handle_error( nerr, 'NF90_CREATE', ierr )
+  call nclib__errMssg( nerr, 'NF90_CREATE', ierr )
   if ( ierr == 0 ) then
     ldef = .true.
     print '(a)', 'Output to ' // trim( file_nc )
@@ -62,16 +75,90 @@ program ncmake_CF16
 
   ! put global attributes
   nerr = nf90_put_att( ncid, NF90_GLOBAL, 'Conventions', 'CF-1.6' )
-  call nclib__handle_error( nerr, 'NF90_PUT_ATT (Conventions)', ierr )
+  call nclib__errMssg( nerr, 'NF90_PUT_ATT (Conventions)', ierr )
   nerr = nf90_put_att( ncid, NF90_GLOBAL, 'title', trim( title ) )
-  call nclib__handle_error( nerr, 'NF90_PUT_ATT (title)', ierr )
+  call nclib__errMssg( nerr, 'NF90_PUT_ATT (title)', ierr )
   nerr = nf90_put_att( ncid, NF90_GLOBAL, 'source', trim( source ) )
-  call nclib__handle_error( nerr, 'NF90_PUT_ATT (source)', ierr )
+  call nclib__errMssg( nerr, 'NF90_PUT_ATT (source)', ierr )
 
   ! define and put dimensions and coordinate variables
   allocate(dimIfs(ncor))
   do n = 1, ncor
-    call ncmake_CF16__add_dimension( dimIfs(n) )
+   ! change to define mode
+    if ( .not. ldef ) then
+      nerr = nf90_redef( ncid )
+      call nclib__errMssg( nerr, 'NF90_REDEF', ierr )
+      if ( ierr == 0 ) ldef = .true.
+    endif
+
+    ! read namelist
+    call readnml_coordinate()
+    dimIfs(n)%name = trim( dimName )
+    dimIfs(n)%dlen = dimLength
+ 
+    if ( trim( standard_name ) == '@@@@' ) then
+      if ( trim( long_name ) == '@@@@' ) then
+        print '(a)', 'Error: neither long_name nor standard_name is specified. '
+        stop
+      else
+        if ( trim( units ) == '@@@@' ) then
+          call CFnclib__dimensionAttribute( ncid, trim( dimName ), dimLength, &
+          &  dimIfs(n)%dimID, dimIfs(n)%varID, trim( dimKind ), &
+          &  long_name = trim( long_name ), &
+          &  axis = axis, positive = trim( positive ), &
+          &  calendar = trim( calendar ), dateRef = dateRef )
+        else
+          call CFnclib__dimensionAttribute( ncid, trim( dimName ), dimLength, &
+          &  dimIfs(n)%dimID, dimIfs(n)%varID, trim( dimKind ), &
+          &  long_name = trim( long_name ), &
+          &  units = trim( units ), axis = axis, positive = trim( positive ), &
+          &  calendar = trim( calendar ), dateRef = dateRef )
+        endif
+      endif
+    else
+      if ( trim( long_name ) == '@@@@' ) then
+        if ( trim( units ) == '@@@@' ) then
+          call CFnclib__dimensionAttribute( ncid, trim( dimName ), dimLength, &
+          &  dimIfs(n)%dimID, dimIfs(n)%varID, trim( dimKind ), &
+          &  standard_name = trim( standard_name ), &
+          &  axis = axis, positive = trim( positive ), &
+          &  calendar = trim( calendar ), dateRef = dateRef )
+        else
+          call CFnclib__dimensionAttribute( ncid, trim( dimName ), dimLength, &
+          &  dimIfs(n)%dimID, dimIfs(n)%varID, trim( dimKind ), &
+          &  standard_name = trim( standard_name ), &
+          &  units = trim( units ), axis = axis, positive = trim( positive ), &
+          &  calendar = trim( calendar ), dateRef = dateRef )
+        endif
+      else
+        if ( trim( units ) == '@@@@' ) then
+          call CFnclib__dimensionAttribute( ncid, trim( dimName ), dimLength, &
+          &  dimIfs(n)%dimID, dimIfs(n)%varID, trim( dimKind ), &
+          &  standard_name = trim( standard_name ), long_name = trim( long_name ), &
+          &  axis = axis, positive = trim( positive ), &
+          &  calendar = trim( calendar ), dateRef = dateRef )
+        else
+          call CFnclib__dimensionAttribute( ncid, trim( dimName ), dimLength, &
+          &  dimIfs(n)%dimID, dimIfs(n)%varID, trim( dimKind ), &
+          &  standard_name = trim( standard_name ), long_name = trim( long_name ), &
+          &  units = trim( units ), axis = axis, positive = trim( positive ), &
+          &  calendar = trim( calendar ), dateRef = dateRef )
+        endif
+      endif
+    endif
+
+    nerr = nf90_enddef( ncid )
+    call nclib__errMssg( nerr, 'NF90_ENDDEF', ierr )
+    if ( ierr /= 0 ) stop
+    if ( ierr == 0 ) ldef = .false.
+
+    ! read dimension values
+    allocate(vdim(dimLength))
+    call readvalue_coordinate( trim( fileCord ), vdim )
+
+    ! write dimension variables
+    call CFnclib__dimensionPut( ncid, dimIfs(n)%varID, vdim )
+    deallocate(vdim)
   enddo
 
   ! define and put variables
@@ -81,150 +168,13 @@ program ncmake_CF16
 
   ! close netCDF file
   nerr = nf90_close( ncid )
-  call nclib__handle_error( nerr, 'NF90_CLOSE', ierr )
+  call nclib__errMssg( nerr, 'NF90_CLOSE', ierr )
   if ( ierr /= 0 ) stop
 
   close(unml)
 
 
   contains
-
-    subroutine ncmake_CF16__add_dimension( dimIf )
-      type(dimCF16), intent(out):: dimIf
-
-      integer(i4)          :: n          ! loop variable
-      real(r4), allocatable:: vdim(:)    ! dimension value
-      character(len = 100) :: units_time ! 'units' attribute for time dimension
-
-      ! &nml_coordinate
-      integer(i4)         :: length        ! length of the dimension
-      character(len = 20) :: name_dim      ! name of the dimension
-      character(len = 200):: long_name     ! 'long_name' attribute of the dimension
-      character(len = 200):: standard_name ! 'standard_name' attribute of the dimension
-      character(len = 100):: units         ! 'units' attribute of the dimension
-      character(len = 1)  :: axis          ! 'axis' attribute of the dimension
-      character(len = 4)  :: positive      ! 'positive' attribute of the dimension
-      character(len = 20) :: date_ref      ! reference date of the time axis
-      character(len = 20) :: calendar      ! 'calendar' attibute of time dimension
-      character(len = 200):: file_cord     ! name of dimension file
-
-      namelist /nml_coordinate/ name_dim, long_name, standard_name, length, units, &
-      &                         axis, positive, date_ref, calendar, file_cord
-
-      ! initial value for namelist variables
-      long_name     = 'none'
-      standard_name = 'none'
-      units         = 'dimensionless'
-      axis          = 'N'
-      positive      = 'none'
-      calendar      = 'gregorian'
-      date_ref      = '00000000000000000000'
-
-      ! read namelist and check
-      read(unml, nml = nml_coordinate)
-      if ( trim( long_name ) == 'none' .and. trim( standard_name ) == 'none' ) then
-        print '(a)', 'Error: neither long_name nor standard_name are specified. '
-        stop
-      endif
-      if ( axis == 'N' ) then
-        print '(a)', 'Error: axis is not specified. '
-        stop
-      endif
-
-      ! change to define mode
-      if ( .not. ldef ) then
-        nerr = nf90_redef( ncid )
-        call nclib__handle_error( nerr, 'NF90_REDEF', ierr )
-        if ( ierr == 0 ) ldef = .true.
-      endif
-
-      ! define dimension
-      dimIf%name = name_dim
-      dimIf%dlen = length
-      nerr = nf90_def_dim( ncid, trim( name_dim ), length, dimIf%dimID )
-      call nclib__handle_error( nerr, 'NF90_DEF_DIM (' // trim( name_dim ) // ')', ierr )
-
-      ! define dimension variable
-      nerr =  nf90_def_var( ncid, trim( name_dim ), NF90_FLOAT, dimIf%dimID, dimIf%varID )
-      call nclib__handle_error( nerr, 'NF90_DEF_VAR (' // trim( name_dim ) // ')', ierr )
-      !   long_name
-      if ( trim( long_name ) /= 'none' ) then
-        nerr = nf90_put_att( ncid, dimIf%varID, 'long_name', trim( long_name ) )
-        call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_dim ) // ':long_name)', ierr )
-      endif
-      !   standard_name
-      if ( trim( standard_name ) /= 'none' ) then
-        nerr = nf90_put_att( ncid, dimIf%varID, 'standard_name', trim( standard_name ) )
-        call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_dim ) // ':standard_name)', ierr )
-      endif
-      !   units
-      if ( trim( units ) /= 'dimensionless' ) then
-        if ( axis == 'T' ) then
-          if ( date_ref == '00000000000000000000' ) then
-            print '(a)', 'Error: date_ref is not specified.'
-            stop
-          endif
-          units_time = trim( units ) // ' since ' // date_ref(1:4) // '-' // &
-          &            date_ref(5:6) // '-' // date_ref(7:8)
-          if ( date_ref(9:20) /= '000000000000' ) then
-            units_time = trim( units_time ) // ' ' // date_ref(9:10) // ':' // &
-            &            date_ref(11:12) // ':' // date_ref(13:14)
-            if ( date_ref(15:20) /= '000000' ) then
-              units_time = trim( units_time ) // '.' // date_ref(15:20)
-            endif
-          endif
-          nerr = nf90_put_att( ncid, dimIf%varID, 'units', trim( units_time ) )
-        else
-          nerr = nf90_put_att( ncid, dimIf%varID, 'units', trim( units ) )
-        endif
-        call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_dim ) // ':units)', ierr )
-      endif
-      !   axis (and positive)
-      nerr = nf90_put_att( ncid, dimIf%varID, 'axis', axis )
-      call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_dim ) // ':axis)', ierr )
-      if ( axis == 'Z' ) then
-        if ( trim( positive ) == 'none' ) then
-          print '(a)', 'Error: positive is not specified. '
-          stop
-        else
-          nerr = nf90_put_att( ncid, dimIf%varID, 'positive', trim( positive ) )
-          call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_dim ) // ':positive)', ierr )
-        endif
-      endif
-      !   calendar
-      if ( axis == 'T' ) then
-        nerr = nf90_put_att( ncid, dimIf%varID, 'calendar', trim( calendar ) )
-        call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_dim ) // ':calendar)', ierr )
-      endif
-
-      nerr = nf90_enddef( ncid )
-      call nclib__handle_error( nerr, 'NF90_ENDDEF', ierr )
-      if ( ierr /= 0 ) stop
-      if ( ierr == 0 ) ldef = .false.
-
-      ! read dimension values
-      open(udim, file = trim( file_cord ), form = 'formatted', status = 'old', action = 'read', iostat = ierr)
-      if ( ierr /= 0 ) then
-        print '(a)', 'Error: cannot open dimension value file. ' // trim( file_cord )
-        stop
-      endif
-      allocate(vdim(length))
-      if ( length >= 10 ) then
-        do n = 1, length / 10
-          read(udim, *) vdim(10*(n-1)+1:10*n)
-        enddo
-      endif
-      if ( mod( length, 10 ) > 0 ) then
-        read(udim, *) vdim(length/10*10+1:length)
-      endif
-      close(udim)
-
-      ! write dimension variables
-      nerr = nf90_put_var( ncid, dimIf%varID, vdim )
-      call nclib__handle_error( nerr, 'NF90_PUT_VAR (' // trim( name_dim ) // ')', ierr )
-
-    end subroutine ncmake_CF16__add_dimension
-
 
     subroutine ncmake_CF16__add_variable( dimIfs )
       type(dimCF16), intent(in):: dimIfs(:) ! dimension information
@@ -283,7 +233,7 @@ program ncmake_CF16
       ! change to define mode
       if ( .not. ldef ) then
         nerr = nf90_redef( ncid )
-        call nclib__handle_error( nerr, 'NF90_REDEF', ierr )
+        call nclib__errMssg( nerr, 'NF90_REDEF', ierr )
         if ( ierr == 0 ) ldef = .true.
       endif
 
@@ -308,22 +258,22 @@ program ncmake_CF16
         endif
       enddo
       nerr = nf90_def_var( ncid, trim( name_var ), NF90_FLOAT, dimIDs, varID )
-      call nclib__handle_error( nerr, 'NF90_DEF_VAR (' // trim( name_var ) // ')', ierr )
+      call nclib__errMssg( nerr, 'NF90_DEF_VAR (' // trim( name_var ) // ')', ierr )
       if ( ierr /= 0 ) stop
       !   long_name
       if ( trim( long_name ) /= 'none' ) then
         nerr = nf90_put_att( ncid, varID, 'long_name', trim( long_name ) )
-        call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // 'long_name)', ierr )
+        call nclib__errMssg( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // 'long_name)', ierr )
       endif
       !   standard_name
       if ( trim( standard_name ) /= 'none' ) then
         nerr = nf90_put_att( ncid, varID, 'standard_name', trim( standard_name ) )
-        call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // 'standard_name)', ierr )
+        call nclib__errMssg( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // 'standard_name)', ierr )
       endif
       !   units
       if ( trim( units ) /= 'dimensionless' ) then
         nerr = nf90_put_att( ncid, varID, 'units', trim( units ) )
-        call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // 'units)', ierr )
+        call nclib__errMssg( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // 'units)', ierr )
       endif
       !   _FillValue
       if ( undef(1) /= undef(2) .and. undef(2) /= 10.e0 ) then
@@ -331,20 +281,20 @@ program ncmake_CF16
       else
         nerr = nf90_put_att( ncid, varID, '_FillValue', undef(1) )
       endif
-      call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // '_FillValue)', ierr )
+      call nclib__errMssg( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // '_FillValue)', ierr )
       ! scale_factor
       if ( scale_factor /= 0.e0 ) then
         nerr = nf90_put_att( ncid, varID, 'scale_factor', scale_factor )
-        call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // 'scale_factor)', ierr )
+        call nclib__errMssg( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // 'scale_factor)', ierr )
       endif
       ! add_offset
       if ( add_offset /= 0.e0 ) then
         nerr = nf90_put_att( ncid, varID, 'add_offset', add_offset )
-        call nclib__handle_error( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // 'add_offset)', ierr )
+        call nclib__errMssg( nerr, 'NF90_PUT_ATT (' // trim( name_var ) // ':' // 'add_offset)', ierr )
       endif
 
       nerr = nf90_enddef( ncid )
-      call nclib__handle_error( nerr, 'NF90_ENDDEF', ierr )
+      call nclib__errMssg( nerr, 'NF90_ENDDEF', ierr )
       if ( ierr /= 0 ) stop
       if ( ierr == 0 ) ldef = .false.
 
@@ -430,9 +380,55 @@ program ncmake_CF16
           print '(a)', 'Error: dimension number exceed current maximum. '
           stop
       end select
-      call nclib__handle_error( nerr, 'NF90_PUT_VAR (' // trim( name_var ) // ')', ierr )
+      call nclib__errMssg( nerr, 'NF90_PUT_VAR (' // trim( name_var ) // ')', ierr )
 
       deallocate(variable)
     end subroutine ncmake_CF16__add_variable
+
+
+
+    subroutine readnml_coordinate()
+      namelist /nml_coordinate/ dimName, dimLength, dimKind, standard_name, long_name, &
+      &                         axis, positive, units, calendar, dateRef, fileCord
+
+      ! initial value
+      standard_name = '@@@@'
+      long_name     = '@@@@'
+      axis          = '@'
+      positive      = '@@@@'
+      units         = '@@@@'
+      calendar      = 'gregorian'
+      dateRef       = '00000000000000000000'
+
+      read(unml, nml = nml_coordinate)
+    end subroutine readnml_coordinate
+
+
+    subroutine readvalue_coordinate( fileIn, array )
+      character(len = *), intent(in) :: fileIn   ! name of input file
+      real(r4),           intent(out):: array(:) ! output array
+
+      integer(i4):: dimlen ! length of the array
+      integer(i4):: n      ! loop variable
+      integer(i4):: ierr
+
+      dimlen = size( array )
+
+      open(udim, file = fileIn, form = 'formatted', status = 'old', action = 'read', iostat = ierr)
+      if ( ierr /= 0 ) then
+        print '(a)', 'Error: cannot open dimension value file. ' // fileIn
+        stop
+      endif
+      if ( dimlen >= 10 ) then
+        do n = 1, dimlen / 10
+          read(udim, *) array(10*(n-1)+1:10*n)
+        enddo
+      endif
+      if ( mod( dimlen, 10 ) > 0 ) then
+        read(udim, *) array(dimlen/10*10+1:dimlen)
+      endif
+      close(udim)
+
+    end subroutine readvalue_coordinate
 
 end program ncmake_CF16
