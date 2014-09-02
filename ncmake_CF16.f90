@@ -2,8 +2,10 @@ program ncmake_CF16
 
   use netcdf
   use cnst,  only: i4, r4
-  use nclib, only: CFnclib__dimensionAttribute, CFnclib__dimensionPut, &
-  &     CFnclib__varAttr, CFnclib__varAttr_range, CFnclib__varPut, nclib__errMssg
+  use nclib, only: nclib__errMssg, &
+  &     CFnclib__glbAttr, &
+  &     CFnclib__dimensionAttribute, CFnclib__dimensionPut, &
+  &     CFnclib__varAttr, CFnclib__varAttr_range, CFnclib__varPut
 
   implicit none
 
@@ -31,72 +33,54 @@ program ncmake_CF16
   type(dimCF16), allocatable:: dimIfs(:)    ! coordinate information
 
   ! &nml_files
-  character(len = 200):: file_nc   ! name of the output netCDF file
-  logical             :: flg_64bit ! 64-bit offset format flag
+  character(len = 200):: file_nc       ! name of the output netCDF file
+  logical             :: flg_64bit     ! 64-bit offset format flag
   ! &nml_general
-  integer(i4)         :: ncor   ! number of coordinates
-  integer(i4)         :: nvar   ! number of variables
-  character(len = 100):: title  ! 'title' attribute
-  character(len = 200):: source ! 'source' attribute
+  integer(i4)         :: ncor          ! number of coordinates
+  integer(i4)         :: nvar          ! number of variables
+  character(len = 100):: title         ! 'title' attribute
+  character(len = 200):: source        ! 'source' attribute
   ! &nml_coordinate and &nml_variable
   character(len = 200):: standard_name ! 'standard_name' attribute
   character(len = 200):: long_name     ! 'long_name' attribute
   character(len = 100):: units         ! 'units' attribute
   ! &nml_coordinate
-  integer(i4)         :: dimLength ! length of the dimension
-  character(len = 20) :: dimName   ! name of the dimension
-  character(len = 10) :: dimKind   ! kind of the dimension variable
-  character(len = 1)  :: axis      ! 'axis' attribute of the dimension
-  character(len = 4)  :: positive  ! 'positive' attribute of the dimension
-  character(len = 20) :: calendar  ! 'calendar' attibute of time dimension
-  character(len = 20) :: dateRef   ! reference date of the time axis
-  character(len = 200):: fileCord  ! name of dimension file
+  integer(i4)         :: dimLength     ! length of the dimension
+  character(len = 20) :: dimName       ! name of the dimension
+  character(len = 10) :: dimKind       ! kind of the dimension variable
+  character(len = 1)  :: axis          ! 'axis' attribute of the dimension
+  character(len = 4)  :: positive      ! 'positive' attribute of the dimension
+  character(len = 20) :: calendar      ! 'calendar' attibute of time dimension
+  character(len = 20) :: dateRef       ! reference date of the time axis
+  character(len = 200):: fileCord      ! name of dimension file
   ! &nml_variable
-  integer(i4)         :: ndim         ! number of dimensions
-  character(len = 20) :: varName      ! name of the variable
-  character(len = 10) :: varKind      ! kind of the variable
-  character(len = 20) :: dimList(20)  ! list of the dimension name
-  real(r4)            :: undef(2)     ! input/output undefined values
-  real(r4)            :: scale_factor ! 'scale_factor' attribute of the variable
-  real(r4)            :: add_offset   ! 'add_offset' attribute of the variable
-  integer(i4)         :: nrec(3)      ! record number and interval in the source file
-  character(len = 200):: fileVar      ! name of the source file of the variable
-
-
-  namelist /nml_files/   file_nc, flg_64bit
-  namelist /nml_general/ ncor, nvar, title, source
+  integer(i4)         :: ndim          ! number of dimensions
+  character(len = 20) :: varName       ! name of the variable
+  character(len = 10) :: varKind       ! kind of the variable
+  character(len = 20) :: dimList(20)   ! list of the dimension name
+  real(r4)            :: undef(2)      ! input/output undefined values
+  real(r4)            :: scale_factor  ! 'scale_factor' attribute of the variable
+  real(r4)            :: add_offset    ! 'add_offset' attribute of the variable
+  integer(i4)         :: nrec(3)       ! record number and interval in the source file
+  character(len = 200):: fileVar       ! name of the source file of the variable
 
   ! read namelist
-  flg_64bit = .false.
-  open(unml, file = file_nml, form = 'formatted', status = 'old', action = 'read', iostat = ierr)
-  if ( ierr /= 0 ) then
-    print '(a)', 'Error: cannot open ' // file_nml
-    stop
-  endif
-  read(unml, nml = nml_files)
-  read(unml, nml = nml_general)
+  call readnml_general( )
 
   ! open netCDF file
   if ( flg_64bit ) then
-    nerr = nf90_create( trim( file_nc ), cmode = or( NF90_NOCLOBBER, NF90_64BIT_OFFSET ), ncid = ncid )
+    nerr = nf90_create( trim( file_nc ), cmode = or( NF90_NOCLOBBER, NF90_64BIT_OFFSET ), &
+    &                   ncid = ncid )
   else
     nerr = nf90_create( trim( file_nc ), NF90_NOCLOBBER, ncid )
   endif
   call nclib__errMssg( nerr, 'NF90_CREATE', ierr )
-  if ( ierr == 0 ) then
-    ldef = .true.
-    print '(a)', 'Output to ' // trim( file_nc )
-  else
-    stop
-  endif
+  if ( ierr /= 0 ) stop
+  ldef = .true.
+  print '(a)', 'Output to ' // trim( file_nc )
 
   ! put global attributes
-  nerr = nf90_put_att( ncid, NF90_GLOBAL, 'Conventions', 'CF-1.6' )
-  call nclib__errMssg( nerr, 'NF90_PUT_ATT (Conventions)', ierr )
-  nerr = nf90_put_att( ncid, NF90_GLOBAL, 'title', trim( title ) )
-  call nclib__errMssg( nerr, 'NF90_PUT_ATT (title)', ierr )
-  nerr = nf90_put_att( ncid, NF90_GLOBAL, 'source', trim( source ) )
-  call nclib__errMssg( nerr, 'NF90_PUT_ATT (source)', ierr )
+  call CFnclib__glbAttr( ncid, trim( title ), trim( source ) )
 
   ! define and put dimensions and coordinate variables
   allocate(dimIfs(ncor))
@@ -225,7 +209,7 @@ program ncmake_CF16
       print '(a)', 'Error: variable dimension exceeds 4.'
       stop
     end select
-    deallocate(variable0)
+    deallocate(vshape, variable0)
   enddo
 
   ! close netCDF file
@@ -236,6 +220,26 @@ program ncmake_CF16
 
 
   contains
+
+    subroutine readnml_general( )
+      integer(i4):: ierr
+
+      namelist /nml_files/   file_nc, flg_64bit
+      namelist /nml_general/ ncor, nvar, title, source
+
+      ! initial value
+      flg_64bit = .false.
+
+      open(unml, file = file_nml, form = 'formatted', status = 'old', action = 'read', iostat = ierr)
+      if ( ierr /= 0 ) then
+        print '(a)', 'Error: cannot open ' // file_nml
+        stop
+      endif
+      read(unml, nml = nml_files)
+      read(unml, nml = nml_general)
+
+    end subroutine readnml_general
+
 
     subroutine readnml_coordinate( )
       namelist /nml_coordinate/ dimName, dimLength, dimKind, standard_name, long_name, &
