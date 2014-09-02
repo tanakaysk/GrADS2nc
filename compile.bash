@@ -5,7 +5,7 @@
 # root directory of ncmake
 TOOL_HOMED="./"
 # directory of common programming platform
-CPPFD="/home/tanakaysk/common"
+CPPFD="/home/tanakaysk/Develop/commonlib"
 # Fortran 95 compiler
 COMPILE_F95=gfortran44 #ifrot
 
@@ -27,44 +27,22 @@ if [ $# -eq 1 ] ; then
     fi
 fi
 
-nm_host=`hostname`
-nm_user=`who -m | awk '{print $1}'`
-
-case ${nm_host} in
-    ubuntu )
-	CPPFD=/home/${nm_user}/common
-	COMPILE_F95=gfortran44
-	;;
-    OCEAN-02 | OCEAN-03 )
-	CPPFD=/home/${nm_user}/common
-	COMPILE_F95=gfortran44
-	;;
-    yf4p22 )
-	if [ ${nm_user} == "tanakaysk" ] ; then
-	    CPPFD=/home/${nm_user}/common
-	    COMPILE_F95=gfortran44
-	fi
-	;;
-    * )
-	nm_host=default
-	dcheck=0
-	if [ ! -d ${CPPFD} ] ; then
-	    echo "Error: Invalid directory path to Common development platforms"
-	    echo "       Check variable CPPFD."
-	    exit 2
-	fi
-	if [ ! -e ${CPPFD}/compiler/compiler.mk.${COMPILE_F95} ] ; then
-	    echo "Error: compiler macro file does not exist"
-	    echo "       Check variable COMPILE_F95."
-	    exit 3
-	fi
-	;;
-esac
+dcheck=0
+if [ ! -d ${CPPFD} ] ; then
+    echo "Error: Invalid directory path to Common development platforms"
+    echo "       Check variable CPPFD."
+    exit 2
+fi
+if [ ! -e ${CPPFD}/compiler/compiler.mk.${COMPILE_F95} ] ; then
+    echo "Error: compiler macro file does not exist"
+    echo "       Check variable COMPILE_F95."
+    exit 3
+fi
 
 export CPPFD=${CPPFD}
 export TOOL_HOMED=${TOOL_HOMED}
 
-cp -v ${CPPFD}/env/env.mk.${nm_host} env.mk
+cp -v ${CPPFD}/env/env.mk.default env.mk
 if [ ${fdbg} -eq "0" ] ; then
     cp -v ${CPPFD}/compiler/compiler.mk.${COMPILE_F95} compiler.mk
 else
