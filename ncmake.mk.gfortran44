@@ -1,0 +1,7 @@
+# macro definition
+#   specific for ncmake tools
+
+# directory of executables
+EXECD = $(TOOL_HOMED)
+
+FFLAGS += -fconvert=big-endian
