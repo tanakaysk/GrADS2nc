@@ -9,16 +9,17 @@ GrADS2nc -- GrADS形式のデータから netCDF への変換ツール
 --------------------------------------------------
 
 GrADS 形式の格子データ (Grid Point Value: GPV) を `CF convention <http://cfconventions.org/>`_ に準拠した `netCDF <https://www.unidata.ucar.edu/software/netcdf/>`_ ファイルに変換する．
-変換は2段階で行われる:
+変換は3段階で行われる:
 
 #. データのメタ情報を記述したファイルを作成する．
 #. メタ情報と実データを元に変換を実行する．
+#. 変換したデータが CF convention に準拠しているかをチェックする．
 
-本パッケージでは以下のツールを提供する:
+本パッケージでは以下を提供する:
 
-* GrADS description file (*.ctl) を用いたメタ情報の作成支援
-* ファイルの変換
-
+* GrADS description file (*.ctl) を用いたメタ情報の作成支援ツール
+* ファイルの変換ツール
+* CF convention の compliance checker のインストール方法に関するドキュメント
 
 環境
 --------------------------------------------------
@@ -78,6 +79,93 @@ GrADS description file がある場合はメタ情報ファイルの作成支援
 メタ情報ファイルが作成されたら，そのファイル名を namelist.ncmake とし，ファイル変換ツールを実行する::
 
    $ ./ncmake_CF16
+
+
+Compliance checker のインストール方法
+--------------------------------------------------
+
+CF convention の策定グループから提供されている compliance checker **cfchecks** のインストール方法についてまとめる．
+
+準備
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**cfchecks** には以下のライブラリが必要である:
+
+* `UDUNITS <http://www.unidata.ucar.edu/software/udunits/>`_ (Ver. 2.0 以上)
+* netCDF (Ver. 3 以上)
+* `CDAT <http://www2-pcmdi.llnl.gov/cdat>`_ (Ver. 5.x)
+
+UDUNITS-2 のインストール
+""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Ubuntu の場合は，リポジトリから取得可能::
+
+   $ sudo apt-get install libudunits2-0 liudunits2-dev
+
+リポジトリから取得できない場合は，ソースを取得してインストールする (*todo*)．
+
+CDAT のインストール
+""""""""""""""""""""""""""""""""""""""""""""""""""
+
+ここでは，CDAT から描画機能などを削ったコアのみのパッケージである **cdat-lite** を使うことにする．
+
+* easy_install を使うことができる
+* netCDF ライブラリがインストール済みである
+ことを前提とする．
+
+#. netCDF のインストールディレクトリ，netCDF-4 の場合は HDF5 ライブラリがあるディレクトリを環境変数に設定する ::
+
+      $ export NETCDF_HOME=/usr/local/netcdf/4.3.2/gcc4.8.2
+      $ export HDF5_HOME=/usr/lib
+
+   .. note::
+
+      setup.py は /usr/lib, /usr/include を自動で探しに行くので，その場合は環境変数の設定は必要ない．
+      また，ライブラリを ${NETCDF_HOME}/lib, ${HDF5_HOME}/lib に，ヘッダファイルを ${NETCDF_HOME}/include, ${HDF5_HOME}/include に探しに行くので，それ以外のディレクトリ構成となっている場合は，シンボリックリンクなどで対応する．
+
+#. ソースファイルを取得する ::
+
+      $ easy_install -eb . cdat-lite==5.2rc1
+
+   .. warning::
+
+      cdat-lite の最新バージョンは 6.0rc2 だが， **cfchecks** が対応しているのは 5.x なので Ver. 5.2rc1 を使用する．
+
+#. コンパイル，インストール ::
+
+      $ python setup.py bdist_egg > install.log 2>&1
+      $ sudo easy_install dist/cdat_lite*.egg
+
+
+cfcheks のインストール
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+#. `リポジトリ <https://github.com/cf-convention>`_ からソースファイルを取得する ::
+
+      $ git clone https://github.com/cf-convention/repository-cf.git
+
+#. cfcheks のインストール ::
+
+      $ cd ./repository-cf/cf-checker/trunk
+      $ sudo python setup.py install
+
+#. XML の table データを準備する ::
+
+      $ cd ./repository-cf/cf-standard-names/trunk/src
+      $ mv area-type-table.xml cf-standard-name-table.xml ${CF_TABLES}
+
+      #   以下の環境変数を設定しない場合は，cfchecks のオプションで table データを指定する必要あり
+      $ export CF_AREA_TYPES=${CF_TABLES}/area-type-table.xml
+      $ export CF_STANDARD_NAMES=${CF_TABLES}/cf-standard-name-table.xml
+      #   必要に応じて udunits2.xml ファイルの場所も環境変数に設定する
+      $ export UDUNITS=${Path_to_udunits2.xml}
+
+使い方
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+引数にファイル名を指定して **cfchecks** を実行する ::
+
+   $ cfchecks <netCDF_file.nc>
 
 
 ディレクトリ構成
