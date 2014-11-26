@@ -145,7 +145,7 @@ def fileOutCoordinate(fileCor, dimLen, dimLoc):
     fcor = open(fileCor, 'w')
     strwrt = ''
     for i in range(dimLen):
-        strwrt += '{:11.4f}'.format(dimLoc[i])
+        strwrt += '{0:11.4f}'.format(dimLoc[i])
         if i % 10 == 9:
             fcor.write(strwrt + '\n')
             strwrt = ''
